@@ -108,23 +108,43 @@
   </div>
 
 <script>
-  if (!localStorage.getItem('truthchain_secret')) {
-    const random = cryptoRandomString(32);
-    localStorage.setItem('truthchain_secret', random);
+  async function validatePseudo(pseudo) {
+    const res = await fetch(`/api/validate-pseudo?pseudo=${encodeURIComponent(pseudo)}`);
+    const data = await res.json();
+    return data.valid;
   }
 
-  if (!localStorage.getItem('truthchain_pseudo')) {
-    const chosen = prompt("Choose your permanent Truthchain pseudo:");
-    if (!chosen || chosen.trim() === "") {
-      alert("Pseudo required.");
-      location.reload();
+  async function askForPseudo() {
+    let pseudo = null;
+    while (!pseudo) {
+      const input = prompt("Choose your permanent Truthchain pseudo:");
+      if (!input) return location.reload();
+      const valid = await validatePseudo(input.trim());
+      if (!valid) {
+        alert("⚠️ This pseudonym is already in use. Try another.");
+        continue;
+      }
+      pseudo = input.trim();
+      localStorage.setItem('truthchain_pseudo', pseudo);
     }
-    localStorage.setItem('truthchain_pseudo', chosen.trim());
   }
 
-  const pseudo = localStorage.getItem('truthchain_pseudo');
-  const secret = localStorage.getItem('truthchain_secret');
-  document.getElementById('pseudoDisplay').value = "Pseudo: " + pseudo;
+  async function initIdentity() {
+    if (!localStorage.getItem('truthchain_pseudo')) {
+      await askForPseudo();
+    }
+
+    if (!localStorage.getItem('truthchain_secret')) {
+      const random = cryptoRandomString(32);
+      localStorage.setItem('truthchain_secret', random);
+    }
+
+    const pseudo = localStorage.getItem('truthchain_pseudo');
+    const secret = localStorage.getItem('truthchain_secret');
+    document.getElementById('pseudoDisplay').value = "Pseudo: " + pseudo;
+
+    return { pseudo, secret };
+  }
 
   async function sha256(text) {
     const encoder = new TextEncoder();
@@ -148,6 +168,8 @@
     if (!truth || truth.trim() === "") return alert("Please enter a truth.");
     if (truth.length > 111) return alert("Maximum 111 characters allowed.");
 
+    const pseudo = localStorage.getItem('truthchain_pseudo');
+    const secret = localStorage.getItem('truthchain_secret');
     const signature = await sha256(pseudo + secret);
 
     await fetch('/api/commit', {
@@ -201,7 +223,7 @@
   }
 
   setupInfiniteScroll();
-  loadMore();
+  initIdentity().then(loadMore);
 </script>
 </body>
 </html>

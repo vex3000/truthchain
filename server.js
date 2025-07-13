@@ -123,13 +123,21 @@ app.post('/api/commit', (req, res) => {
   res.status(201).json(newBlock);
 });
 
-// 🔸 API pour voir toute la chaîne
+// 🔸 API pour voir toute la chaîne (pagination)
 app.get('/api/chain', (req, res) => {
   const offset = parseInt(req.query.offset || '0');
   const limit = parseInt(req.query.limit || '50');
-
   const slice = blockchain.slice().reverse().slice(offset, offset + limit);
   res.json(slice);
+});
+
+// 🔍 API pour valider un pseudo AVANT engagement
+app.get('/api/validate-pseudo', (req, res) => {
+  const requested = req.query.pseudo?.trim().toLowerCase();
+  const exists = blockchain.some(block =>
+    block.pseudo.toLowerCase() === requested && block.index > 0
+  );
+  res.json({ valid: !exists });
 });
 
 // 🚀 Lancement du serveur
