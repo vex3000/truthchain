@@ -2,6 +2,7 @@
 <html>
 <head>
   <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>Truthchain</title>
   <style>
     body {
@@ -78,6 +79,14 @@
       padding: 1rem 0;
       white-space: pre-wrap;
       color: #00ff00;
+      opacity: 0;
+      transform: translateY(10px);
+      transition: opacity 0.4s ease-out, transform 0.4s ease-out;
+    }
+
+    .block.visible {
+      opacity: 1;
+      transform: translateY(0);
     }
 
     ::selection {
@@ -95,6 +104,27 @@
 
     ::-webkit-scrollbar-track {
       background-color: #111;
+    }
+
+    /* 🔽 Responsive : pour mobile < 600px */
+    @media (max-width: 600px) {
+      body {
+        padding: 1rem;
+        font-size: 15px;
+      }
+
+      h1 {
+        font-size: 1.2rem;
+      }
+
+      input, button {
+        font-size: 1rem;
+        padding: 1rem;
+      }
+
+      .container {
+        max-width: 100%;
+      }
     }
   </style>
 </head>
@@ -192,6 +222,7 @@
   let offset = 0;
   let loading = false;
   const limit = 50;
+  let lastBlockHash = null;
 
   async function loadMore() {
     if (loading) return;
@@ -202,12 +233,17 @@
 
     const container = document.getElementById('chain');
     chain.forEach(block => {
-      const lock = block.verified ? "🔒" : "⚠️";
+      const lock = block.verified ? "🔐" : "⚠️";
       const div = document.createElement('div');
       div.className = 'block';
       div.innerHTML = `<div style="color: white;"><strong>${block.timestamp}</strong> — <em>${block.pseudo}</em> ${lock}</div><div>${block.truth}</div>`;
       container.appendChild(div);
+      setTimeout(() => div.classList.add('visible'), 30);
     });
+
+    if (chain.length > 0 && offset === 0) {
+      lastBlockHash = chain[0].hash;
+    }
 
     offset += chain.length;
     loading = false;
@@ -222,8 +258,24 @@
     });
   }
 
+  function refreshChainLive() {
+    fetch('/api/chain?offset=0&limit=1')
+      .then(res => res.json())
+      .then(([latest]) => {
+        if (latest && latest.hash !== lastBlockHash) {
+          lastBlockHash = latest.hash;
+          offset = 0;
+          document.getElementById('chain').innerHTML = '';
+          loadMore();
+        }
+      });
+  }
+
   setupInfiniteScroll();
-  initIdentity().then(loadMore);
+  initIdentity().then(() => {
+    loadMore();
+    setInterval(refreshChainLive, 5000);
+  });
 </script>
 </body>
 </html>
