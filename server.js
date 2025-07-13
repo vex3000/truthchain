@@ -1,6 +1,7 @@
 const express = require('express');
 const fs = require('fs');
 const crypto = require('crypto');
+const path = require('path'); // <--- Ajouté
 const bodyParser = require('body-parser');
 
 const app = express();
@@ -9,13 +10,15 @@ const port = 3000;
 app.use(bodyParser.json());
 app.use(express.static('.'));
 
-const blockchainFile = 'blockchain.json';
+// 🔐 Ici on stocke le fichier dans un répertoire persistant (Render)
+const dataDir = fs.existsSync('/mnt/data') ? '/mnt/data' : '.';
+const blockchainFile = path.join(dataDir, 'blockchain.json');
 
-// 🔹 Stockage local de la blockchain et des signatures
+// 🔹 Blockchain en mémoire + signatures connues
 let blockchain = [];
 const knownSignatures = {};
 
-// 🔹 Chargement de la blockchain existante
+// 🔹 Chargement depuis fichier ou création du bloc Genesis
 if (fs.existsSync(blockchainFile)) {
   console.log("📦 Fichier blockchain.json trouvé. Lecture en cours...");
   const data = fs.readFileSync(blockchainFile);
@@ -32,7 +35,7 @@ if (fs.existsSync(blockchainFile)) {
       console.log(`✅ ${blockchain.length} blocs chargés.`);
     }
 
-    // Remplir les signatures connues à partir de la chaîne
+    // Signatures déjà enregistrées
     blockchain.forEach(block => {
       if (block.pseudo && block.signature) {
         knownSignatures[block.pseudo] = block.signature;
@@ -53,13 +56,13 @@ if (fs.existsSync(blockchainFile)) {
   saveBlockchain();
 }
 
-// 🔐 Fonction de hash
+// 🔐 Fonction de hash (SHA-256 du contenu)
 function hashBlock(block) {
   const data = block.index + block.timestamp + block.truth + block.pseudo + (block.signature || '') + block.previousHash;
   return crypto.createHash('sha256').update(data).digest('hex');
 }
 
-// 🔐 Création du bloc Genesis
+// 🔐 Génération du bloc Genesis
 function createGenesisBlock() {
   const genesisBlock = {
     index: 0,
@@ -75,9 +78,9 @@ function createGenesisBlock() {
   return genesisBlock;
 }
 
-// 💾 Sauvegarde dans blockchain.json
+// 💾 Sauvegarde locale (dans /mnt/data)
 function saveBlockchain() {
-  console.log("💾 Sauvegarde de la blockchain dans blockchain.json...");
+  console.log("💾 Sauvegarde de la blockchain dans /mnt/data...");
   fs.writeFileSync(blockchainFile, JSON.stringify(blockchain, null, 2));
   console.log("✅ Fichier blockchain.json mis à jour.");
 }
@@ -91,13 +94,11 @@ app.post('/api/commit', (req, res) => {
     return res.status(400).json({ error: "Pseudo et signature sont requis." });
   }
 
-  // Vérifier si le pseudo est déjà pris avec une signature différente
   if (knownSignatures[pseudo] && knownSignatures[pseudo] !== signature) {
     console.log(`❌ Signature invalide pour le pseudo "${pseudo}"`);
     return res.status(400).json({ error: "Ce pseudo est déjà utilisé par quelqu’un d’autre." });
   }
 
-  // Stocker la signature si première apparition
   if (!knownSignatures[pseudo]) {
     knownSignatures[pseudo] = signature;
     console.log(`🔐 Nouveau pseudo vérifié: ${pseudo}`);
@@ -123,7 +124,7 @@ app.post('/api/commit', (req, res) => {
   res.status(201).json(newBlock);
 });
 
-// 🔸 API pour voir toute la chaîne (pagination)
+// 🔸 API pour voir la chaîne (avec pagination)
 app.get('/api/chain', (req, res) => {
   const offset = parseInt(req.query.offset || '0');
   const limit = parseInt(req.query.limit || '50');
@@ -131,7 +132,7 @@ app.get('/api/chain', (req, res) => {
   res.json(slice);
 });
 
-// 🔍 API pour valider un pseudo AVANT engagement
+// 🔍 API pour valider un pseudo avant enregistrement
 app.get('/api/validate-pseudo', (req, res) => {
   const requested = req.query.pseudo?.trim().toLowerCase();
   const exists = blockchain.some(block =>
@@ -140,7 +141,7 @@ app.get('/api/validate-pseudo', (req, res) => {
   res.json({ valid: !exists });
 });
 
-// 🚀 Lancement du serveur
+// 🚀 Démarrage du serveur
 app.listen(port, () => {
   console.log(`🚀 Truthchain running at http://localhost:${port}`);
 });
