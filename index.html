@@ -1,0 +1,207 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <title>Truthchain</title>
+  <style>
+    body {
+      background-color: #000;
+      color: #fff;
+      font-family: 'Courier New', Courier, monospace;
+      font-size: 16px;
+      line-height: 1.5;
+      margin: 0;
+      padding: 2rem;
+      height: 100vh;
+      overflow: hidden;
+      display: flex;
+      justify-content: center;
+      align-items: flex-start;
+    }
+
+    .container {
+      max-width: 640px;
+      width: 100%;
+      height: 100%;
+      display: flex;
+      flex-direction: column;
+    }
+
+    h1 {
+      font-size: 1.5rem;
+      margin-bottom: 1rem;
+      border-bottom: 1px solid #444;
+      padding-bottom: 0.5rem;
+    }
+
+    input, button {
+      font-family: 'Courier New', monospace;
+      font-size: 1rem;
+      padding: 0.7rem;
+      width: 100%;
+      margin-top: 0.5rem;
+      box-sizing: border-box;
+      border: 1px solid #00ff00;
+      background: #000;
+      color: #00ff00;
+    }
+
+    #truthInput {
+      maxlength: 111;
+    }
+
+    button {
+      cursor: pointer;
+      border-radius: 20px;
+      transition: background 0.2s, color 0.2s;
+      text-transform: uppercase;
+      letter-spacing: 1px;
+    }
+
+    button:hover {
+      background: #00ff00;
+      color: #000;
+    }
+
+    #chain {
+      flex: 1;
+      overflow-y: auto;
+      margin-top: 2rem;
+      border-top: 1px solid #444;
+      padding-top: 1rem;
+      padding-right: 1rem;
+      scroll-behavior: smooth;
+    }
+
+    .block {
+      border-bottom: 1px solid #333;
+      padding: 1rem 0;
+      white-space: pre-wrap;
+      color: #00ff00;
+    }
+
+    ::selection {
+      background: #444;
+      color: #fff;
+    }
+
+    ::-webkit-scrollbar {
+      width: 8px;
+    }
+
+    ::-webkit-scrollbar-thumb {
+      background-color: #444;
+    }
+
+    ::-webkit-scrollbar-track {
+      background-color: #111;
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h1>🧱 Truthchain</h1>
+    <input id="pseudoDisplay" disabled />
+    <input id="truthInput" maxlength="111" placeholder="Write your truth (max 111 chars)..." />
+    <button onclick="commitTruth()">commit to truth</button>
+    <div id="chain"></div>
+  </div>
+
+<script>
+  if (!localStorage.getItem('truthchain_secret')) {
+    const random = cryptoRandomString(32);
+    localStorage.setItem('truthchain_secret', random);
+  }
+
+  if (!localStorage.getItem('truthchain_pseudo')) {
+    const chosen = prompt("Choose your permanent Truthchain pseudo:");
+    if (!chosen || chosen.trim() === "") {
+      alert("Pseudo required.");
+      location.reload();
+    }
+    localStorage.setItem('truthchain_pseudo', chosen.trim());
+  }
+
+  const pseudo = localStorage.getItem('truthchain_pseudo');
+  const secret = localStorage.getItem('truthchain_secret');
+  document.getElementById('pseudoDisplay').value = "Pseudo: " + pseudo;
+
+  async function sha256(text) {
+    const encoder = new TextEncoder();
+    const data = encoder.encode(text);
+    const hashBuffer = await crypto.subtle.digest('SHA-256', data);
+    const hashArray = Array.from(new Uint8Array(hashBuffer));
+    return hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
+  }
+
+  function cryptoRandomString(length) {
+    const chars = 'abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
+    let result = '';
+    for (let i = 0; i < length; i++) {
+      result += chars.charAt(Math.floor(Math.random() * chars.length));
+    }
+    return result;
+  }
+
+  async function commitTruth() {
+    const truth = document.getElementById('truthInput').value;
+    if (!truth || truth.trim() === "") return alert("Please enter a truth.");
+    if (truth.length > 111) return alert("Maximum 111 characters allowed.");
+
+    const signature = await sha256(pseudo + secret);
+
+    await fetch('/api/commit', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ truth, pseudo, signature })
+    }).then(async res => {
+      if (!res.ok) {
+        const msg = await res.json();
+        alert(msg.error || "Erreur.");
+      } else {
+        document.getElementById('truthInput').value = '';
+        offset = 0;
+        document.getElementById('chain').innerHTML = '';
+        loadMore();
+      }
+    });
+  }
+
+  let offset = 0;
+  let loading = false;
+  const limit = 50;
+
+  async function loadMore() {
+    if (loading) return;
+    loading = true;
+
+    const res = await fetch(`/api/chain?offset=${offset}&limit=${limit}`);
+    const chain = await res.json();
+
+    const container = document.getElementById('chain');
+    chain.forEach(block => {
+      const lock = block.verified ? "🔒" : "⚠️";
+      const div = document.createElement('div');
+      div.className = 'block';
+      div.innerHTML = `<div style="color: white;"><strong>${block.timestamp}</strong> — <em>${block.pseudo}</em> ${lock}</div><div>${block.truth}</div>`;
+      container.appendChild(div);
+    });
+
+    offset += chain.length;
+    loading = false;
+  }
+
+  function setupInfiniteScroll() {
+    const container = document.getElementById('chain');
+    container.addEventListener('scroll', () => {
+      if (container.scrollTop + container.clientHeight >= container.scrollHeight - 10) {
+        loadMore();
+      }
+    });
+  }
+
+  setupInfiniteScroll();
+  loadMore();
+</script>
+</body>
+</html>
