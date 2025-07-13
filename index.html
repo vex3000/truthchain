@@ -146,19 +146,28 @@
   }
 
   async function askForPseudo() {
-    let pseudo = null;
-    while (!pseudo) {
-      const input = prompt("Choose your permanent Truthchain pseudo:");
-      if (!input) return location.reload();
-      const valid = await validatePseudo(input.trim());
-      if (!valid) {
-        alert("⚠️ This pseudonym is already in use. Try another.");
-        continue;
-      }
-      pseudo = input.trim();
-      localStorage.setItem('truthchain_pseudo', pseudo);
+  let pseudo = null;
+  while (!pseudo) {
+    const input = prompt("Choose your permanent Truthchain pseudo (max 20 chars):");
+    if (!input) return location.reload();
+
+    const trimmed = input.trim();
+
+    if (trimmed.length > 20) {
+      alert("⚠️ Your pseudonym must be 20 characters or less.");
+      continue;
     }
+
+    const valid = await validatePseudo(trimmed);
+    if (!valid) {
+      alert("⚠️ This pseudonym is already in use. Try another.");
+      continue;
+    }
+
+    pseudo = trimmed;
+    localStorage.setItem('truthchain_pseudo', pseudo);
   }
+}
 
   async function initIdentity() {
     if (!localStorage.getItem('truthchain_pseudo')) {
